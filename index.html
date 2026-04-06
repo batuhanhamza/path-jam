@@ -1672,41 +1672,44 @@ document.getElementById('input-import-json').addEventListener('change', e => {
   }
 });
 
+// ── DEFAULT LEVEL ──────────────────────────────
+const DEFAULT_LEVEL = {
+  "size": 5,
+  "walls": [],
+  "initialColors": {},
+  "queues": [
+    [
+      { "color": "red",  "dir": "up"    },
+      { "color": "blue", "dir": "up"    },
+      { "color": "red",  "dir": "right" }
+    ],
+    [
+      { "color": "red",  "dir": "down"  },
+      { "color": "blue", "dir": "down"  },
+      { "color": "red",  "dir": "left"  }
+    ]
+  ]
+};
+// ───────────────────────────────────────────────
+
 // ═══════════════════════════════════════════════
 //  BOOTSTRAP
 // ═══════════════════════════════════════════════
 
-editorSize        = 5;
-editorWalls       = new Set();
-editorCellColors  = new Map();
-editorSlots = [
-  [
-    { color: 'red',  dir: 'up'    },
-    { color: 'blue', dir: 'up'    },
-    { color: 'red',  dir: 'right' },
-    { color: 'blue', dir: 'right' },
-  ],
-  [
-    { color: 'blue', dir: 'down'  },
-    { color: 'red',  dir: 'down'  },
-    { color: 'blue', dir: 'left'  },
-    { color: 'red',  dir: 'left'  },
-  ],
-];
-
+editorSize       = DEFAULT_LEVEL.size;
+editorWalls      = new Set(DEFAULT_LEVEL.walls);
+editorCellColors = new Map(Object.entries(DEFAULT_LEVEL.initialColors || {}));
+editorSlots      = DEFAULT_LEVEL.queues.map(s => s.map(it => ({ ...it })));
 levelConfig = {
   size: editorSize,
   walls: new Set(editorWalls),
-  initialColors: {},
+  initialColors: DEFAULT_LEVEL.initialColors || {},
   queues: editorSlots.map(s => s.map(it => ({ ...it })))
 };
-
-// Sync ed-size input
 document.getElementById('ed-size').value = editorSize;
 buildEditorBoard();
 renderEditorSlots();
 startGame();
-
 
 </script>
 </body>
