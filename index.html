@@ -1263,13 +1263,12 @@ function tryFloodFill(colorName, colorHex) {
 
   const blocked = Array.from({length: n}, (_, r) =>
     Array.from({length: n}, (__, c) =>
-      isWall(r, c) || gridState[r][c] === colorHex
+      gridState[r][c] === colorHex
     )
   );
 
   const outside = Array.from({length: n}, () => Array(n).fill(false));
   
-  // Seed walls as outside so they don't act as free boundaries
   for (let r = 0; r < n; r++)
     for (let c = 0; c < n; c++)
       if (isWall(r, c)) outside[r][c] = true;
