@@ -1,0 +1,1713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Path Jam</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0f0f13;
+    --surface: #1a1a22;
+    --surface2: #22222e;
+    --border: #2e2e3e;
+    --text: #e8e8f0;
+    --text-dim: #6b6b88;
+    --accent: #7c6af7;
+    --accent2: #f76a8a;
+
+    --red: #f74a6a;
+    --blue: #4a8af7;
+    --green: #4af7a0;
+    --yellow: #f7d44a;
+    --purple: #c44af7;
+    --orange: #f7944a;
+
+    --cell: 56px;
+    --gap: 3px;
+    --radius: 6px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    width: 100%;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .logo {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+  }
+
+  .tab {
+    padding: 7px 20px;
+    border-radius: 5px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+  }
+
+  .tab.active {
+    background: var(--surface2);
+    color: var(--text);
+    box-shadow: 0 0 0 1px var(--border);
+  }
+
+  /* ── MAIN ── */
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: 900px;
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+  }
+
+  .panel { display: none; width: 100%; flex-direction: column; align-items: center; gap: 28px; }
+  .panel.active { display: flex; }
+
+  /* ── GAME LAYOUT ── */
+  #game-panel {
+    align-items: center;
+  }
+
+  .game-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  /* ── CANVAS WRAPPER ── */
+  #game-panel .canvas-area {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .canvas-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+  }
+
+  #board-container {
+    position: relative;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  #board {
+    display: grid;
+    gap: var(--gap);
+  }
+
+  .cell {
+    width: var(--cell);
+    height: var(--cell);
+    border-radius: var(--radius);
+    background: var(--surface2);
+    border: 1.5px solid var(--border);
+    position: relative;
+    transition: background 0.18s, border-color 0.18s;
+    cursor: default;
+  }
+
+  .cell.wall {
+    background: var(--bg);
+    border-color: var(--bg);
+    cursor: default;
+    pointer-events: none;
+  }
+
+  .cell.drop-target {
+    border-color: rgba(124, 106, 247, 0.7);
+    box-shadow: inset 0 0 0 2px rgba(124,106,247,0.3);
+  }
+
+  .cell.painted {
+    border-color: transparent;
+  }
+
+  /* ── QUEUE ── */
+  .queue-section {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .queue-slots-header {
+    display: flex;
+    align-items: center;
+    padding: 0 2px;
+  }
+
+  .queue-slots-wrap {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    justify-content: flex-start;
+  }
+
+  .queue-slots-wrap::-webkit-scrollbar { height: 4px; }
+  .queue-slots-wrap::-webkit-scrollbar-track { background: transparent; }
+  .queue-slots-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .queue-slot-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .queue-slot-label {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    font-family: 'Space Mono', monospace;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .queue-track {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+    padding: 10px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    min-width: 76px;
+  }
+
+  .queue-item {
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    cursor: grab;
+    border: 2.5px solid transparent;
+    transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+    position: relative;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .queue-item:hover {
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+
+  .queue-item.dragging {
+    opacity: 0.35;
+    transform: scale(0.95);
+  }
+
+  .queue-item.used {
+    opacity: 0.2;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  .queue-item-number {
+    position: absolute;
+    top: -6px;
+    left: -6px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-size: 9px;
+    font-family: 'Space Mono', monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+  }
+
+  /* ── STATUS BAR ── */
+  .status-bar {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .status-item { display: flex; align-items: center; gap: 8px; }
+  .status-val {
+    color: var(--text);
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  /* ── WIN/FAIL OVERLAY ── */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    backdrop-filter: blur(4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+
+  .overlay.show {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .overlay-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 48px 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    transform: scale(0.9);
+    transition: transform 0.3s;
+  }
+
+  .overlay.show .overlay-box { transform: scale(1); }
+
+  .overlay-title {
+    font-size: 40px;
+    font-weight: 800;
+    letter-spacing: -1px;
+  }
+
+  .overlay-sub {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .btn {
+    padding: 11px 28px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: opacity 0.15s, transform 0.15s;
+    margin-top: 8px;
+  }
+
+  .btn:hover { opacity: 0.85; transform: translateY(-1px); }
+  .btn.secondary {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  /* ── EDITOR ── */
+  .editor-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    width: 100%;
+  }
+
+  @media (max-width: 620px) {
+    .editor-grid { grid-template-columns: 1fr; }
+  }
+
+  .editor-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .editor-section h3 {
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+
+  label {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'Space Mono', monospace;
+  }
+
+  input[type=number], select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    padding: 8px 12px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  input[type=number]:focus, select:focus {
+    border-color: var(--accent);
+  }
+
+  /* editor mini board */
+  #editor-board-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #editor-board {
+    display: grid;
+    gap: 2px;
+  }
+
+  .editor-cell {
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    background: var(--surface2);
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    transition: all 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .editor-cell:hover { border-color: var(--accent); }
+  .editor-cell.wall-cell {
+    background: var(--bg);
+    border-color: var(--bg);
+    color: var(--border);
+  }
+
+  .editor-cell.colored-cell {
+    border-color: transparent;
+  }
+
+  .editor-paint-toolbar {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .paint-btn {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1.5px solid var(--border);
+    background: var(--bg);
+    color: var(--text-dim);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.12s;
+    white-space: nowrap;
+  }
+
+  .paint-btn.active {
+    color: var(--text);
+    border-color: currentColor;
+    box-shadow: 0 0 0 1px currentColor;
+  }
+
+  .paint-btn.erase-btn.active { color: var(--text); border-color: var(--text); }
+  .paint-btn.wall-btn.active  { color: var(--text-dim); border-color: var(--border); background: var(--bg); }
+
+  /* queue locked items */
+  .queue-item.locked {
+    opacity: 0.3;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  .queue-item.next-up {
+    box-shadow: 0 0 0 2px currentColor;
+  }
+
+  .editor-hint {
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    color: var(--text-dim);
+    text-align: center;
+  }
+
+  /* queue editor */
+  .queue-editor-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .queue-editor-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+  }
+
+  .queue-editor-item .item-preview {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    border: 2px solid transparent;
+  }
+
+  .queue-editor-item select {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .queue-editor-item .remove-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.15s;
+    line-height: 1;
+  }
+
+  .queue-editor-item .remove-btn:hover { color: var(--accent2); }
+
+  .add-item-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .add-item-row select {
+    flex: 1;
+    min-width: 80px;
+  }
+
+  /* queue editor slots */
+  .queue-slots-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .queue-slot-editor {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .queue-slot-editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .queue-slot-editor-title {
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  .slot-items-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 36px;
+  }
+
+  .slot-item-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px 5px 10px;
+    border-radius: 6px;
+    border: 1.5px solid transparent;
+    font-size: 14px;
+    cursor: default;
+    position: relative;
+  }
+
+  .slot-item-chip .chip-remove {
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.5;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    line-height: 1;
+    transition: opacity 0.15s;
+  }
+
+  .slot-item-chip .chip-remove:hover { opacity: 1; }
+
+  .slot-item-chip.drag-over {
+    outline: 2px dashed currentColor;
+    outline-offset: 2px;
+  }
+
+  .slot-add-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .slot-add-row select {
+    flex: 1;
+    min-width: 70px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .btn-sm {
+    padding: 6px 14px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+
+  /* JSON actions */
+  .json-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn-icon {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ── DRAG GHOST ── */
+  #drag-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    width: 60px;
+    height: 60px;
+    border-radius: 10px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    opacity: 0.95;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    border: 2.5px solid transparent;
+  }
+
+  /* animations */
+  @keyframes cellPop {
+    0% { transform: scale(1.25); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes fillPulse {
+    0% { opacity: 0.5; }
+    50% { opacity: 1; }
+    100% { opacity: 1; }
+  }
+
+  .cell.just-painted {
+    animation: cellPop 0.2s ease-out forwards;
+  }
+
+  .cell.just-filled {
+    animation: fillPulse 0.35s ease-out forwards;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">PATH JAM</div>
+  <div class="tabs">
+    <button class="tab active" data-tab="game">PLAY</button>
+    <button class="tab" data-tab="editor">EDITOR</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ═══ GAME PANEL ═══ -->
+  <div id="game-panel" class="panel active">
+    <div class="status-bar">
+      <div class="status-item">QUEUE <span class="status-val" id="stat-remaining">—</span></div>
+      <div class="status-item">FILLED <span class="status-val" id="stat-filled">0%</span></div>
+      <div class="status-item">CELLS <span class="status-val" id="stat-cells">—</span></div>
+    </div>
+
+    <div class="game-inner">
+      <div class="canvas-area">
+        <div class="canvas-label">CANVAS</div>
+        <div id="board-container">
+          <div id="board"></div>
+        </div>
+      </div>
+
+      <div class="queue-section" id="queue-section">
+        <div class="queue-slots-header">
+          <span class="canvas-label">QUEUES</span>
+        </div>
+        <!-- slots rendered by JS -->
+      </div>
+
+      <div>
+        <button class="btn secondary" id="btn-restart">↺ RESTART</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ EDITOR PANEL ═══ -->
+  <div id="editor-panel" class="panel">
+    <div class="editor-grid">
+
+      <!-- Canvas settings -->
+      <div class="editor-section">
+        <h3>Canvas</h3>
+        <div class="field">
+          <label>GRID SIZE (N×N)</label>
+          <input type="number" id="ed-size" value="5" min="3" max="10">
+        </div>
+        <button class="btn secondary" id="btn-build-grid" style="margin-top:4px;">BUILD GRID</button>
+        <div id="editor-board-wrap">
+          <div class="editor-paint-toolbar" id="paint-toolbar">
+            <button class="paint-btn erase-btn active" data-mode="erase">✕ erase</button>
+            <button class="paint-btn wall-btn" data-mode="wall">▪ wall</button>
+          </div>
+          <div id="editor-board"></div>
+          <div class="editor-hint">Click cells to paint · right-click to erase</div>
+        </div>
+      </div>
+
+      <!-- Queue settings -->
+      <div class="editor-section">
+        <h3>Queue Slots</h3>
+        <div class="queue-slots-editor" id="queue-slots-editor"></div>
+        <button class="btn secondary btn-sm" id="btn-add-slot" style="margin-top:4px;">+ ADD SLOT</button>
+      </div>
+
+    </div>
+
+    <div class="json-actions">
+      <button class="btn btn-icon" id="btn-apply-level">▶ PLAY THIS LEVEL</button>
+      <button class="btn secondary btn-icon" id="btn-download-json">⬇ EXPORT JSON</button>
+      <label class="btn secondary btn-icon" style="cursor:pointer;">
+        ⬆ IMPORT JSON
+        <input type="file" id="input-import-json" accept=".json" style="display:none;">
+      </label>
+    </div>
+  </div>
+
+</main>
+
+<!-- Drag ghost -->
+<div id="drag-ghost"></div>
+
+<!-- Overlays -->
+<div class="overlay" id="overlay-win">
+  <div class="overlay-box">
+    <div class="overlay-title" style="background:linear-gradient(135deg,#4af7a0,#4a8af7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">YOU WIN!</div>
+    <div class="overlay-sub" id="win-sub">Canvas filled with <span id="win-remaining"></span> items remaining</div>
+    <button class="btn" id="btn-win-restart">PLAY AGAIN</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-fail">
+  <div class="overlay-box">
+    <div class="overlay-title" style="color:var(--accent2);">FAIL</div>
+    <div class="overlay-sub">Queue exhausted — canvas not filled</div>
+    <button class="btn secondary" id="btn-fail-restart">TRY AGAIN</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  CONSTANTS & STATE
+// ═══════════════════════════════════════════════
+
+const COLORS = {
+  red:    '#f74a6a',
+  blue:   '#4a8af7',
+  green:  '#4af7a0',
+  yellow: '#f7d44a',
+  purple: '#c44af7',
+  orange: '#f7944a',
+};
+
+const DIR_ARROW = { up: '↑', down: '↓', left: '←', right: '→', upleft: '↖', upright: '↗', downleft: '↙', downright: '↘' };
+const DIR_DELTA = { up: [-1,0], down: [1,0], left: [0,-1], right: [0,1], upleft: [-1,-1], upright: [-1,1], downleft: [1,-1], downright: [1,1] };
+
+const ANIM_SPEED = 120; // ms per cell
+
+// levelConfig.queues = array of slots, each slot = array of {color, dir}
+let levelConfig = {
+  size: 5,
+  walls: new Set(),
+  queues: [
+    [ { color: 'red', dir: 'up' }, { color: 'red', dir: 'right' } ],
+    [ { color: 'blue', dir: 'down' }, { color: 'blue', dir: 'left' } ],
+    [ { color: 'green', dir: 'right' } ],
+  ]
+};
+
+// Game state
+let gridState   = [];
+let lineState   = [];
+// queueSlots[slotIdx][itemIdx] = { color, dir, used }
+let queueSlots  = [];
+let animating   = false;
+let dragItem    = null; // { slotIdx, itemIdx, color, dir }
+
+// Editor state
+let editorWalls = new Set();
+let editorSize  = 5;
+// editorSlots = array of slot arrays
+let editorSlots = [];
+
+// ═══════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════
+
+function key(r, c) { return `${r},${c}`; }
+function inBounds(r, c, size) { return r >= 0 && r < size && c >= 0 && c < size; }
+function isWall(r, c) { return levelConfig.walls.has(key(r, c)); }
+function isPlayable(r, c) { return inBounds(r, c, levelConfig.size) && !isWall(r, c); }
+
+function totalPlayable() {
+  const n = levelConfig.size;
+  let count = 0;
+  for (let r = 0; r < n; r++)
+    for (let c = 0; c < n; c++)
+      if (!isWall(r, c)) count++;
+  return count;
+}
+
+function filledCount() {
+  const n = levelConfig.size;
+  let count = 0;
+  for (let r = 0; r < n; r++)
+    for (let c = 0; c < n; c++)
+      if (!isWall(r, c) && gridState[r][c] !== null) count++;
+  return count;
+}
+
+function remainingTotal() {
+  return queueSlots.flat().filter(it => !it.used).length;
+}
+
+// ═══════════════════════════════════════════════
+//  BOARD RENDER
+// ═══════════════════════════════════════════════
+
+function buildBoard() {
+  const board = document.getElementById('board');
+  const n = levelConfig.size;
+  board.style.gridTemplateColumns = `repeat(${n}, var(--cell))`;
+  board.innerHTML = '';
+  gridState = Array.from({length: n}, () => Array(n).fill(null));
+  lineState = Array.from({length: n}, () => Array(n).fill(null));
+
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const cell = document.createElement('div');
+      cell.classList.add('cell');
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      if (isWall(r, c)) {
+        cell.classList.add('wall');
+      }
+      board.appendChild(cell);
+    }
+  }
+
+  // Apply initial pre-colored cells from editor
+  const ic = levelConfig.initialColors || {};
+  Object.entries(ic).forEach(([k, colorName]) => {
+    const [r, c] = k.split(',').map(Number);
+    if (!isPlayable(r, c)) return;
+    const hex = COLORS[colorName];
+    if (!hex) return;
+    gridState[r][c] = hex;
+    lineState[r][c] = { color: colorName, closed: true }; // treat as filled area
+    const el = getCellEl(r, c);
+    if (el) {
+      el.style.background = hex;
+      el.style.borderColor = hex;
+      el.classList.add('painted');
+    }
+  });
+}
+
+function getCellEl(r, c) {
+  return document.querySelector(`#board .cell[data-r="${r}"][data-c="${c}"]`);
+}
+
+function paintCell(r, c, color, pop = false) {
+  gridState[r][c] = color;
+  const el = getCellEl(r, c);
+  if (!el) return;
+  el.style.background = color;
+  el.style.borderColor = color;
+  el.classList.add('painted');
+  if (pop) {
+    el.classList.remove('just-painted');
+    void el.offsetWidth;
+    el.classList.add('just-painted');
+  }
+}
+
+function clearCell(r, c) {
+  gridState[r][c] = null;
+  const el = getCellEl(r, c);
+  if (!el) return;
+  el.style.background = '';
+  el.style.borderColor = '';
+  el.classList.remove('painted', 'just-painted', 'just-filled');
+}
+
+function flashFill(cells) {
+  cells.forEach(([r, c]) => {
+    const el = getCellEl(r, c);
+    if (!el) return;
+    el.classList.remove('just-filled');
+    void el.offsetWidth;
+    el.classList.add('just-filled');
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  QUEUE RENDER (multi-slot)
+// ═══════════════════════════════════════════════
+
+function buildQueue() {
+  const section = document.getElementById('queue-section');
+  section.innerHTML = `
+    <div class="queue-slots-header">
+      <span class="canvas-label">QUEUES</span>
+    </div>
+    <div class="queue-slots-wrap" id="queue-slots-wrap"></div>
+  `;
+
+  queueSlots = levelConfig.queues.map(slot =>
+    slot.map(it => ({ ...it, used: false }))
+  );
+
+  const wrap = document.getElementById('queue-slots-wrap');
+
+  queueSlots.forEach((slot, slotIdx) => {
+    const col = document.createElement('div');
+    col.classList.add('queue-slot-col');
+
+    const label = document.createElement('div');
+    label.classList.add('queue-slot-label');
+    label.textContent = `S${slotIdx + 1}`;
+
+    const track = document.createElement('div');
+    track.classList.add('queue-track');
+    track.id = `queue-track-${slotIdx}`;
+
+    slot.forEach((item, itemIdx) => {
+      track.appendChild(createQueueItemEl(item, slotIdx, itemIdx));
+    });
+
+    col.appendChild(label);
+    col.appendChild(track);
+    wrap.appendChild(col);
+  });
+
+  updateStatus();
+  setTimeout(refreshQueueVisuals, 0);
+}
+
+function createQueueItemEl(item, slotIdx, itemIdx) {
+  const el = document.createElement('div');
+  el.classList.add('queue-item');
+  el.dataset.slot  = slotIdx;
+  el.dataset.index = itemIdx;
+  el.style.background = COLORS[item.color] + '22';
+  el.style.borderColor = COLORS[item.color];
+  el.style.color = COLORS[item.color];
+  el.innerHTML = `
+    <span style="font-size:20px">${DIR_ARROW[item.dir]}</span>
+    <div class="queue-item-number">${itemIdx + 1}</div>
+  `;
+  if (item.used) {
+    el.classList.add('used');
+  } else {
+    attachItemDrag(el, slotIdx, itemIdx);
+  }
+  return el;
+}
+
+function refreshQueueVisuals() {
+  queueSlots.forEach((slot, slotIdx) => {
+    const firstUnused = slot.findIndex(it => !it.used);
+    slot.forEach((item, itemIdx) => {
+      const el = document.querySelector(`.queue-item[data-slot="${slotIdx}"][data-index="${itemIdx}"]`);
+      if (!el) return;
+      el.classList.remove('next-up', 'locked');
+      if (item.used) return;
+      if (itemIdx === firstUnused) {
+        el.classList.add('next-up');
+        el.style.cursor = 'grab';
+      } else {
+        el.classList.add('locked');
+      }
+    });
+  });
+}
+
+function markUsed(slotIdx, itemIdx) {
+  queueSlots[slotIdx][itemIdx].used = true;
+  const el = document.querySelector(`.queue-item[data-slot="${slotIdx}"][data-index="${itemIdx}"]`);
+  if (el) {
+    el.style.transition = 'opacity 0.2s, transform 0.2s';
+    el.style.opacity = '0';
+    el.style.transform = 'scale(0.7)';
+    setTimeout(() => el.remove(), 220);
+  }
+  updateStatus();
+  setTimeout(refreshQueueVisuals, 230);
+}
+
+// ═══════════════════════════════════════════════
+//  STATUS
+// ═══════════════════════════════════════════════
+
+function updateStatus() {
+  const remaining = remainingTotal();
+  const total  = totalPlayable();
+  const filled = filledCount();
+  const pct = total === 0 ? 0 : Math.round(filled / total * 100);
+  document.getElementById('stat-remaining').textContent = remaining;
+  document.getElementById('stat-filled').textContent = pct + '%';
+  document.getElementById('stat-cells').textContent = `${filled}/${total}`;
+}
+
+// ═══════════════════════════════════════════════
+//  DRAG & DROP — mouse-based (no HTML5 drag API)
+// ═══════════════════════════════════════════════
+
+const ghost = document.getElementById('drag-ghost');
+let isDragging = false;
+
+function showGhost(colorName, dir) {
+  const hex = COLORS[colorName];
+  ghost.style.background = hex + '22';
+  ghost.style.borderColor = hex;
+  ghost.style.color = hex;
+  ghost.innerHTML = `<span>${DIR_ARROW[dir]}</span>`;
+  ghost.style.display = 'flex';
+}
+
+function hideGhost() {
+  ghost.style.display = 'none';
+}
+
+function moveGhost(x, y) {
+  ghost.style.left = x + 'px';
+  ghost.style.top  = y + 'px';
+}
+
+function getCellAtPoint(x, y) {
+  // Hide ghost before hit-testing so it doesn't block elementFromPoint
+  ghost.style.display = 'none';
+  const el = document.elementFromPoint(x, y);
+  // Do NOT re-show here — caller decides visibility
+  if (!el) return null;
+  const cell = el.closest('.cell');
+  if (!cell || cell.classList.contains('wall')) return null;
+  return cell;
+}
+
+function attachItemDrag(el, slotIdx, itemIdx) {
+  el.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    if (animating) return;
+    const item = queueSlots[slotIdx][itemIdx];
+    if (item.used) return;
+    const firstUnused = queueSlots[slotIdx].findIndex(it => !it.used);
+    if (firstUnused !== itemIdx) return;
+
+    e.preventDefault();
+    isDragging = true;
+    dragItem = { slotIdx, itemIdx, ...item };
+    el.classList.add('dragging');
+    showGhost(item.color, item.dir);
+    moveGhost(e.clientX, e.clientY);
+  });
+}
+
+document.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  moveGhost(e.clientX, e.clientY);
+  ghost.style.display = 'flex'; // keep visible while moving
+
+  document.querySelectorAll('.cell.drop-target').forEach(c => c.classList.remove('drop-target'));
+  const cell = getCellAtPoint(e.clientX, e.clientY);
+  ghost.style.display = 'flex'; // restore after hit-test
+  if (cell) cell.classList.add('drop-target');
+});
+
+document.addEventListener('mouseup', e => {
+  if (!isDragging) return;
+  isDragging = false;
+
+  // Clean up dragging styles
+  document.querySelectorAll('.queue-item.dragging').forEach(c => c.classList.remove('dragging'));
+  document.querySelectorAll('.cell.drop-target').forEach(c => c.classList.remove('drop-target'));
+
+  // Hit-test FIRST (hides ghost as side effect), then keep it hidden
+  const cell = dragItem && !animating ? getCellAtPoint(e.clientX, e.clientY) : null;
+  ghost.style.display = 'none'; // ensure hidden after hit-test
+
+  if (cell && dragItem) {
+    const r = parseInt(cell.dataset.r);
+    const c = parseInt(cell.dataset.c);
+    placeItem(dragItem.slotIdx, dragItem.itemIdx, r, c);
+  }
+  dragItem = null;
+});
+
+// ═══════════════════════════════════════════════
+//  CORE MECHANICS
+// ═══════════════════════════════════════════════
+
+function placeItem(slotIdx, itemIdx, startR, startC) {
+  animating = true;
+  const item = queueSlots[slotIdx][itemIdx];
+  const color = COLORS[item.color];
+  const [dr, dc] = DIR_DELTA[item.dir];
+
+  const path = [];
+  let r = startR, c = startC;
+  while (isPlayable(r, c)) {
+    path.push([r, c]);
+    r += dr;
+    c += dc;
+  }
+
+  if (path.length === 0) { animating = false; return; }
+
+  // Snapshot which open-line colors this path crosses BEFORE animation mutates state
+  const crossedColors = new Set();
+  path.forEach(([pr, pc]) => {
+    const ls = lineState[pr][pc];
+    if (ls && ls.color !== item.color && !ls.closed) {
+      crossedColors.add(ls.color);
+    }
+  });
+
+  let step = 0;
+  function nextStep() {
+    if (step >= path.length) {
+      processMove(item.color, color, path, crossedColors);
+      markUsed(slotIdx, itemIdx);
+      animating = false;
+      checkEndConditions();
+      return;
+    }
+    const [pr, pc] = path[step];
+    applyPathCell(pr, pc, color);
+    step++;
+    setTimeout(nextStep, ANIM_SPEED);
+  }
+  nextStep();
+}
+
+function applyPathCell(r, c, colorHex) {
+  // Visual only during animation — don't touch lineState yet
+  gridState[r][c] = colorHex;
+  const el = getCellEl(r, c);
+  if (!el) return;
+  el.style.background = colorHex;
+  el.style.borderColor = colorHex;
+  el.classList.add('painted');
+  el.classList.remove('just-painted');
+  void el.offsetWidth;
+  el.classList.add('just-painted');
+}
+
+function processMove(colorName, colorHex, path, crossedColors) {
+  // Write path cells FIRST so intersection cells are already the new color
+  path.forEach(([r, c]) => {
+    gridState[r][c] = colorHex;
+    lineState[r][c] = { color: colorName, closed: false };
+  });
+
+  // Now destroy crossed open lines — intersection cells are safe because
+  // they now belong to colorName, not the destroyed color
+  crossedColors.forEach(dc => destroyLine(dc));
+
+  tryFloodFill(colorName, colorHex);
+  updateStatus();
+}
+
+function destroyLine(colorName) {
+  const colorHex = COLORS[colorName];
+  const n = levelConfig.size;
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const ls = lineState[r][c];
+      if (ls && ls.color === colorName && !ls.closed) {
+        lineState[r][c] = null;
+        clearCell(r, c);
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  FLOOD FILL
+// ═══════════════════════════════════════════════
+
+function tryFloodFill(colorName, colorHex) {
+  const n = levelConfig.size;
+
+  const blocked = Array.from({length: n}, (_, r) =>
+    Array.from({length: n}, (__, c) =>
+      isWall(r, c) || gridState[r][c] === colorHex
+    )
+  );
+
+  const outside = Array.from({length: n}, () => Array(n).fill(false));
+
+  function floodOutside(sr, sc) {
+    const stack = [[sr, sc]];
+    while (stack.length) {
+      const [r, c] = stack.pop();
+      if (!inBounds(r, c, n) || outside[r][c] || blocked[r][c]) continue;
+      outside[r][c] = true;
+      stack.push([r-1,c],[r+1,c],[r,c-1],[r,c+1]);
+    }
+  }
+
+  for (let r = 0; r < n; r++) {
+    if (!blocked[r][0])   floodOutside(r, 0);
+    if (!blocked[r][n-1]) floodOutside(r, n-1);
+  }
+  for (let c = 0; c < n; c++) {
+    if (!blocked[0][c])   floodOutside(0, c);
+    if (!blocked[n-1][c]) floodOutside(n-1, c);
+  }
+
+  const toFill = [];
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (!blocked[r][c] && !outside[r][c] && gridState[r][c] !== colorHex) {
+        toFill.push([r, c]);
+      }
+    }
+  }
+
+  if (toFill.length > 0) {
+    toFill.forEach(([r, c]) => {
+      gridState[r][c] = colorHex;
+      lineState[r][c] = { color: colorName, closed: true };
+      paintCell(r, c, colorHex);
+    });
+    flashFill(toFill);
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  END CONDITIONS
+// ═══════════════════════════════════════════════
+
+function checkEndConditions() {
+  const total  = totalPlayable();
+  const filled = filledCount();
+
+  if (filled === total && total > 0) {
+    const remaining = remainingTotal();
+    document.getElementById('win-remaining').textContent = remaining;
+    document.getElementById('overlay-win').classList.add('show');
+    return;
+  }
+
+  if (remainingTotal() === 0 && filled < total) {
+    document.getElementById('overlay-fail').classList.add('show');
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  GAME INIT
+// ═══════════════════════════════════════════════
+
+function startGame() {
+  document.getElementById('overlay-win').classList.remove('show');
+  document.getElementById('overlay-fail').classList.remove('show');
+  animating = false;
+  dragItem = null;
+  buildBoard();
+  buildQueue();
+}
+
+// ═══════════════════════════════════════════════
+//  EDITOR — BOARD
+// ═══════════════════════════════════════════════
+
+// editorCellColors: Map key -> colorName (for pre-colored cells)
+let editorCellColors = new Map();
+let paintMode = 'erase'; // 'erase' | 'wall' | colorName
+let isPainting = false;
+
+function buildEditorBoard() {
+  editorSize = parseInt(document.getElementById('ed-size').value) || 5;
+  editorSize = Math.min(10, Math.max(3, editorSize));
+  const newWalls = new Set();
+  editorWalls.forEach(k => {
+    const [r, c] = k.split(',').map(Number);
+    if (r < editorSize && c < editorSize) newWalls.add(k);
+  });
+  editorWalls = newWalls;
+  const newColors = new Map();
+  editorCellColors.forEach((v, k) => {
+    const [r, c] = k.split(',').map(Number);
+    if (r < editorSize && c < editorSize) newColors.set(k, v);
+  });
+  editorCellColors = newColors;
+
+  buildPaintToolbar();
+
+  const board = document.getElementById('editor-board');
+  board.style.gridTemplateColumns = `repeat(${editorSize}, 36px)`;
+  board.innerHTML = '';
+
+  for (let r = 0; r < editorSize; r++) {
+    for (let c = 0; c < editorSize; c++) {
+      const cell = document.createElement('div');
+      cell.classList.add('editor-cell');
+      const k = key(r, c);
+      applyEditorCell(cell, k);
+
+      const paint = () => {
+        if (paintMode === 'erase') {
+          editorWalls.delete(k);
+          editorCellColors.delete(k);
+        } else if (paintMode === 'wall') {
+          editorCellColors.delete(k);
+          editorWalls.add(k);
+        } else {
+          // color mode
+          editorWalls.delete(k);
+          editorCellColors.set(k, paintMode);
+        }
+        applyEditorCell(cell, k);
+      };
+
+      cell.addEventListener('mousedown', e => { if (e.button !== 0) return; isPainting = true; paint(); });
+      cell.addEventListener('mouseover', () => { if (isPainting) paint(); });
+      cell.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        editorWalls.delete(k); editorCellColors.delete(k);
+        applyEditorCell(cell, k);
+      });
+      board.appendChild(cell);
+    }
+  }
+}
+
+function applyEditorCell(cell, k) {
+  cell.className = 'editor-cell';
+  cell.textContent = '';
+  cell.style.background = '';
+  cell.style.borderColor = '';
+  if (editorWalls.has(k)) {
+    cell.classList.add('wall-cell');
+    cell.textContent = '✕';
+  } else if (editorCellColors.has(k)) {
+    const colorName = editorCellColors.get(k);
+    const hex = COLORS[colorName];
+    cell.classList.add('colored-cell');
+    cell.style.background = hex;
+    cell.style.borderColor = hex;
+  }
+}
+
+document.addEventListener('mouseup', () => { isPainting = false; });
+
+function buildPaintToolbar() {
+  const toolbar = document.getElementById('paint-toolbar');
+  if (!toolbar) return;
+  toolbar.innerHTML = '';
+
+  const modes = [
+    { mode: 'erase', label: '✕ erase', color: null },
+    { mode: 'wall',  label: '▪ wall',  color: null },
+    ...Object.keys(COLORS).map(c => ({ mode: c, label: DIR_ARROW.right + ' ' + c, color: COLORS[c] }))
+  ];
+
+  modes.forEach(({ mode, label, color }) => {
+    const btn = document.createElement('button');
+    btn.className = 'paint-btn';
+    btn.textContent = label;
+    if (color) { btn.style.color = color; btn.style.borderColor = color; }
+    if (mode === 'wall') btn.classList.add('wall-btn');
+    if (mode === 'erase') btn.classList.add('erase-btn');
+    if (paintMode === mode) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      paintMode = mode;
+      toolbar.querySelectorAll('.paint-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+    toolbar.appendChild(btn);
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  EDITOR — QUEUE SLOTS
+// ═══════════════════════════════════════════════
+
+let dragSlotIdx = null;
+let dragChipIdx = null;
+let chipDragOverIdx = null;
+
+function renderEditorSlots() {
+  const container = document.getElementById('queue-slots-editor');
+  container.innerHTML = '';
+
+  editorSlots.forEach((slot, slotIdx) => {
+    const section = document.createElement('div');
+    section.classList.add('queue-slot-editor');
+
+    // header
+    const header = document.createElement('div');
+    header.classList.add('queue-slot-editor-header');
+    header.innerHTML = `
+      <span class="queue-slot-editor-title">SLOT ${slotIdx + 1}</span>
+      <button class="remove-btn" data-slot="${slotIdx}" title="Remove slot">✕ slot</button>
+    `;
+    header.querySelector('.remove-btn').addEventListener('click', () => {
+      editorSlots.splice(slotIdx, 1);
+      renderEditorSlots();
+    });
+
+    // items chips — draggable reorder
+    const chipsList = document.createElement('div');
+    chipsList.classList.add('slot-items-list');
+    chipsList.dataset.slot = slotIdx;
+
+    slot.forEach((item, itemIdx) => {
+      const chip = document.createElement('div');
+      chip.classList.add('slot-item-chip');
+      chip.draggable = true;
+      chip.dataset.slot = slotIdx;
+      chip.dataset.item = itemIdx;
+      chip.style.background = COLORS[item.color] + '22';
+      chip.style.borderColor = COLORS[item.color];
+      chip.style.color = COLORS[item.color];
+      chip.innerHTML = `
+        <span class="chip-drag-handle" style="cursor:grab;opacity:0.5;font-size:13px;margin-right:2px;">⠿</span>
+        <span>${DIR_ARROW[item.dir]}</span>
+        <span style="font-size:11px;font-family:'Space Mono',monospace;">${item.color}</span>
+        <button class="chip-remove" data-slot="${slotIdx}" data-item="${itemIdx}">✕</button>
+      `;
+      chip.querySelector('.chip-remove').addEventListener('click', (e) => {
+        e.stopPropagation();
+        editorSlots[slotIdx].splice(itemIdx, 1);
+        renderEditorSlots();
+      });
+
+      // drag events
+      chip.addEventListener('dragstart', e => {
+        dragSlotIdx = slotIdx;
+        dragChipIdx = itemIdx;
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(() => chip.style.opacity = '0.4', 0);
+      });
+      chip.addEventListener('dragend', () => {
+        chip.style.opacity = '';
+        document.querySelectorAll('.slot-item-chip.drag-over').forEach(c => c.classList.remove('drag-over'));
+        dragSlotIdx = null;
+        dragChipIdx = null;
+      });
+      chip.addEventListener('dragover', e => {
+        e.preventDefault();
+        if (dragSlotIdx !== slotIdx) return; // only reorder within same slot
+        document.querySelectorAll('.slot-item-chip.drag-over').forEach(c => c.classList.remove('drag-over'));
+        chip.classList.add('drag-over');
+        chipDragOverIdx = itemIdx;
+      });
+      chip.addEventListener('drop', e => {
+        e.preventDefault();
+        if (dragSlotIdx !== slotIdx || dragChipIdx === null || dragChipIdx === itemIdx) return;
+        const items = editorSlots[slotIdx];
+        const [moved] = items.splice(dragChipIdx, 1);
+        const insertAt = dragChipIdx < itemIdx ? itemIdx - 1 : itemIdx;
+        items.splice(insertAt, 0, moved);
+        renderEditorSlots();
+      });
+
+      chipsList.appendChild(chip);
+    });
+
+    // drop on empty area at end of list (drop after last item)
+    chipsList.addEventListener('dragover', e => e.preventDefault());
+    chipsList.addEventListener('drop', e => {
+      e.preventDefault();
+      if (dragSlotIdx !== slotIdx || dragChipIdx === null) return;
+      const items = editorSlots[slotIdx];
+      const [moved] = items.splice(dragChipIdx, 1);
+      items.push(moved);
+      renderEditorSlots();
+    });
+
+    // add row
+    const addRow = document.createElement('div');
+    addRow.classList.add('slot-add-row');
+    addRow.innerHTML = `
+      <select class="ed-color-sel">
+        ${Object.keys(COLORS).map(c => `<option value="${c}">${c}</option>`).join('')}
+      </select>
+      <select class="ed-dir-sel">
+        ${Object.keys(DIR_ARROW).map(d => `<option value="${d}">${DIR_ARROW[d]} ${d}</option>`).join('')}
+      </select>
+      <button class="btn btn-sm" data-slot="${slotIdx}">+ item</button>
+    `;
+    addRow.querySelector('.btn').addEventListener('click', () => {
+      const color = addRow.querySelector('.ed-color-sel').value;
+      const dir   = addRow.querySelector('.ed-dir-sel').value;
+      editorSlots[slotIdx].push({ color, dir });
+      renderEditorSlots();
+    });
+
+    section.appendChild(header);
+    section.appendChild(chipsList);
+    section.appendChild(addRow);
+    container.appendChild(section);
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  JSON IMPORT / EXPORT
+// ═══════════════════════════════════════════════
+
+function exportLevel() {
+  const data = {
+    size: editorSize,
+    walls: Array.from(editorWalls),
+    initialColors: Object.fromEntries(editorCellColors),
+    queues: editorSlots.map(slot => slot.map(it => ({ color: it.color, dir: it.dir })))
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = 'path-jam-level.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importLevel(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.size || !data.queues) throw new Error('Invalid format');
+      editorSize        = data.size;
+      editorWalls       = new Set(data.walls || []);
+      editorCellColors  = new Map(Object.entries(data.initialColors || {}));
+      editorSlots       = data.queues.map(slot => slot.map(it => ({ color: it.color, dir: it.dir })));
+      document.getElementById('ed-size').value = editorSize;
+      buildEditorBoard();
+      renderEditorSlots();
+    } catch(err) {
+      alert('Invalid JSON file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ═══════════════════════════════════════════════
+//  EVENT LISTENERS
+// ═══════════════════════════════════════════════
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab + '-panel').classList.add('active');
+  });
+});
+
+// Restart
+document.getElementById('btn-restart').addEventListener('click', startGame);
+document.getElementById('btn-win-restart').addEventListener('click', startGame);
+document.getElementById('btn-fail-restart').addEventListener('click', startGame);
+
+// Editor: build grid
+document.getElementById('btn-build-grid').addEventListener('click', buildEditorBoard);
+
+// Editor: add slot
+document.getElementById('btn-add-slot').addEventListener('click', () => {
+  editorSlots.push([]);
+  renderEditorSlots();
+});
+
+// Editor: apply level
+document.getElementById('btn-apply-level').addEventListener('click', () => {
+  const hasItems = editorSlots.some(s => s.length > 0);
+  if (!hasItems) { alert('Add at least one item in a slot.'); return; }
+  levelConfig = {
+    size: editorSize,
+    walls: new Set(editorWalls),
+    queues: editorSlots.map(slot => slot.map(it => ({ ...it }))),
+    initialColors: Object.fromEntries(editorCellColors)
+  };
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector('.tab[data-tab="game"]').classList.add('active');
+  document.getElementById('game-panel').classList.add('active');
+  startGame();
+});
+
+// JSON export
+document.getElementById('btn-download-json').addEventListener('click', exportLevel);
+
+// JSON import
+document.getElementById('input-import-json').addEventListener('change', e => {
+  if (e.target.files[0]) {
+    importLevel(e.target.files[0]);
+    e.target.value = '';
+  }
+});
+
+// ═══════════════════════════════════════════════
+//  BOOTSTRAP
+// ═══════════════════════════════════════════════
+
+editorSize        = 5;
+editorWalls       = new Set();
+editorCellColors  = new Map();
+editorSlots = [
+  [
+    { color: 'red',  dir: 'up'    },
+    { color: 'blue', dir: 'up'    },
+    { color: 'red',  dir: 'right' },
+    { color: 'blue', dir: 'right' },
+  ],
+  [
+    { color: 'blue', dir: 'down'  },
+    { color: 'red',  dir: 'down'  },
+    { color: 'blue', dir: 'left'  },
+    { color: 'red',  dir: 'left'  },
+  ],
+];
+
+levelConfig = {
+  size: editorSize,
+  walls: new Set(editorWalls),
+  initialColors: {},
+  queues: editorSlots.map(s => s.map(it => ({ ...it })))
+};
+
+// Sync ed-size input
+document.getElementById('ed-size').value = editorSize;
+buildEditorBoard();
+renderEditorSlots();
+startGame();
+
+
+</script>
+</body>
+</html>
