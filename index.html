@@ -711,6 +711,52 @@
   .cell.just-filled {
     animation: fillPulse 0.35s ease-out forwards;
   }
+
+  /* ── EGO AREA ── */
+  .ego-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .ego-track {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    background: var(--surface);
+    border: 1px dashed var(--accent2);
+    border-radius: 10px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .ego-label-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ego-badge {
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 1.5px;
+    color: var(--accent2);
+    text-transform: uppercase;
+  }
+
+  .ego-hint {
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    color: var(--text-dim);
+  }
+
+  .ego-track .queue-item {
+    width: 48px;
+    height: 48px;
+    font-size: 18px;
+  }
 </style>
 </head>
 <body>
@@ -750,6 +796,14 @@
 
       <div>
         <button class="btn secondary" id="btn-restart">↺ RESTART</button>
+      </div>
+
+      <div class="ego-section" id="ego-section" style="display:none;">
+        <div class="ego-label-row">
+          <span class="ego-badge">⟲ EGO</span>
+          <span class="ego-hint">place these freely in any order</span>
+        </div>
+        <div class="ego-track" id="ego-track"></div>
       </div>
     </div>
   </div>
@@ -813,6 +867,8 @@
   <div class="overlay-box">
     <div class="overlay-title" style="color:var(--accent2);">FAIL</div>
     <div class="overlay-sub">Queue exhausted — canvas not filled</div>
+    <button class="btn" id="btn-ego">⟲ TAKE BACK <span id="ego-steps-label">3</span></button>
+    <button class="btn" id="btn-ego-solver" style="background:var(--accent);">✦ GET 3 BEST ITEMS</button>
     <button class="btn secondary" id="btn-fail-restart">TRY AGAIN</button>
   </div>
 </div>
@@ -835,6 +891,7 @@ const DIR_ARROW = { up: '↑', down: '↓', left: '←', right: '→', upleft: '
 const DIR_DELTA = { up: [-1,0], down: [1,0], left: [0,-1], right: [0,1], upleft: [-1,-1], upright: [-1,1], downleft: [1,-1], downright: [1,1] };
 
 const ANIM_SPEED = 120; // ms per cell
+const EGO_STEPS = 3;   // kaç adım geri alınacak — 5 yapmak için sadece bunu değiştir
 
 // levelConfig.queues = array of slots, each slot = array of {color, dir}
 let levelConfig = {
@@ -850,10 +907,14 @@ let levelConfig = {
 // Game state
 let gridState   = [];
 let lineState   = [];
-// queueSlots[slotIdx][itemIdx] = { color, dir, used }
 let queueSlots  = [];
 let animating   = false;
-let dragItem    = null; // { slotIdx, itemIdx, color, dir }
+let dragItem    = null;
+
+// Ego state
+let moveHistory = []; // max EGO_STEPS snapshots
+let egoItems    = []; // { color, dir } — items returned by ego
+let egoActive   = false;
 
 // Editor state
 let editorWalls = new Set();
@@ -889,6 +950,8 @@ function filledCount() {
 }
 
 function remainingTotal() {
+  // Ego aktifken un-use edilen queue item'larını sayma — onlar egoItems'ta
+  if (egoActive) return 0;
   return queueSlots.flat().filter(it => !it.used).length;
 }
 
@@ -1161,7 +1224,11 @@ document.addEventListener('mouseup', e => {
   if (cell && dragItem) {
     const r = parseInt(cell.dataset.r);
     const c = parseInt(cell.dataset.c);
-    placeItem(dragItem.slotIdx, dragItem.itemIdx, r, c);
+    if (dragItem.isEgo) {
+      placeItem(dragItem.slotIdx, 0, r, c, true);
+    } else {
+      placeItem(dragItem.slotIdx, dragItem.itemIdx, r, c);
+    }
   }
   dragItem = null;
 });
@@ -1170,9 +1237,9 @@ document.addEventListener('mouseup', e => {
 //  CORE MECHANICS
 // ═══════════════════════════════════════════════
 
-function placeItem(slotIdx, itemIdx, startR, startC) {
+function placeItem(slotIdx, itemIdx, startR, startC, isEgo = false) {
   animating = true;
-  const item = queueSlots[slotIdx][itemIdx];
+  const item = isEgo ? egoItems[slotIdx] : queueSlots[slotIdx][itemIdx];
   const color = COLORS[item.color];
   const [dr, dc] = DIR_DELTA[item.dir];
 
@@ -1185,6 +1252,18 @@ function placeItem(slotIdx, itemIdx, startR, startC) {
   }
 
   if (path.length === 0) { animating = false; return; }
+
+  // Save snapshot before this move (only for non-ego moves)
+  if (!isEgo) {
+    const snapshot = {
+      gridState: gridState.map(row => [...row]),
+      lineState: lineState.map(row => row.map(cell => cell ? { ...cell } : null)),
+      item: { color: item.color, dir: item.dir },
+      slotIdx, itemIdx
+    };
+    moveHistory.push(snapshot);
+    if (moveHistory.length > EGO_STEPS) moveHistory.shift();
+  }
 
   // Snapshot which open-line colors this path crosses BEFORE animation mutates state
   const crossedColors = new Set();
@@ -1199,7 +1278,12 @@ function placeItem(slotIdx, itemIdx, startR, startC) {
   function nextStep() {
     if (step >= path.length) {
       processMove(item.color, color, path, crossedColors);
-      markUsed(slotIdx, itemIdx);
+      if (isEgo) {
+        egoItems.splice(slotIdx, 1);
+        renderEgoArea();
+      } else {
+        markUsed(slotIdx, itemIdx);
+      }
       animating = false;
       checkEndConditions();
       return;
@@ -1316,13 +1400,16 @@ function checkEndConditions() {
   const filled = filledCount();
 
   if (filled === total && total > 0) {
-    const remaining = remainingTotal();
+    const remaining = remainingTotal() + egoItems.length;
     document.getElementById('win-remaining').textContent = remaining;
     document.getElementById('overlay-win').classList.add('show');
+    egoActive = false;
     return;
   }
 
-  if (remainingTotal() === 0 && filled < total) {
+  const queueDone = egoActive ? egoItems.length === 0 : remainingTotal() === 0;
+  if (queueDone && filled < total) {
+    if (egoActive && egoItems.length === 0) egoActive = false;
     document.getElementById('overlay-fail').classList.add('show');
   }
 }
@@ -1334,15 +1421,273 @@ function checkEndConditions() {
 function startGame() {
   document.getElementById('overlay-win').classList.remove('show');
   document.getElementById('overlay-fail').classList.remove('show');
-  animating = false;
-  dragItem = null;
+  animating  = false;
+  dragItem   = null;
+  moveHistory = [];
+  egoItems   = [];
+  egoActive  = false;
+  document.getElementById('ego-section').style.display = 'none';
   buildBoard();
   buildQueue();
 }
 
 // ═══════════════════════════════════════════════
-//  EDITOR — BOARD
+//  EGO
 // ═══════════════════════════════════════════════
+
+function activateEgo() {
+  document.getElementById('overlay-fail').classList.remove('show');
+
+  const steps = Math.min(EGO_STEPS, moveHistory.length);
+  if (steps === 0) { startGame(); return; }
+
+  // Restore state from EGO_STEPS ago
+  const target = moveHistory[moveHistory.length - steps];
+  gridState = target.gridState.map(row => [...row]);
+  lineState = target.lineState.map(row => row.map(cell => cell ? { ...cell } : null));
+
+  // Collect returned items (most recent first → ego area order)
+  egoItems = [];
+  for (let i = moveHistory.length - steps; i < moveHistory.length; i++) {
+    egoItems.push({ color: moveHistory[i].item.color, dir: moveHistory[i].item.dir });
+  }
+
+  // Trim history
+  moveHistory = moveHistory.slice(0, moveHistory.length - steps);
+
+  // Re-mark queue items as unused for the returned moves
+  // (find and un-use them in queueSlots)
+  // We need to walk back through and un-use items — simplest: re-check used count
+  // Items returned are at the END of their slots, so un-use them
+  const returned = egoItems.map((_, i) => {
+    const snap = moveHistory.length === 0
+      ? null
+      : null; // we only need count
+    return i;
+  });
+  // Actually: just un-use the last N used items across all slots
+  let toUnuse = steps;
+  outer: for (let si = queueSlots.length - 1; si >= 0 && toUnuse > 0; si--) {
+    for (let ii = queueSlots[si].length - 1; ii >= 0 && toUnuse > 0; ii--) {
+      if (queueSlots[si][ii].used) {
+        queueSlots[si][ii].used = false;
+        toUnuse--;
+      }
+    }
+  }
+
+  // Repaint board from restored state
+  repaintBoard();
+
+  // Show ego area, re-render queues
+  egoActive = true;
+  updateStatus();
+  refreshQueueVisuals();
+  renderEgoArea();
+  document.getElementById('ego-section').style.display = 'flex';
+
+  // Re-render queue items (restore used → unused visually)
+  rebuildQueueVisuals();
+}
+
+function rebuildQueueVisuals() {
+  // Re-render all queue items based on current queueSlots.used state
+  queueSlots.forEach((slot, slotIdx) => {
+    slot.forEach((item, itemIdx) => {
+      const el = document.querySelector(`.queue-item[data-slot="${slotIdx}"][data-index="${itemIdx}"]`);
+      if (!el) return;
+      if (!item.used) {
+        el.classList.remove('used');
+        el.style.opacity = '';
+        el.style.transform = '';
+      }
+    });
+  });
+  refreshQueueVisuals();
+}
+
+function repaintBoard() {
+  const n = levelConfig.size;
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (isWall(r, c)) continue;
+      const color = gridState[r][c];
+      const el = getCellEl(r, c);
+      if (!el) continue;
+      if (color) {
+        el.style.background = color;
+        el.style.borderColor = color;
+        el.classList.add('painted');
+      } else {
+        el.style.background = '';
+        el.style.borderColor = '';
+        el.classList.remove('painted', 'just-painted', 'just-filled');
+      }
+    }
+  }
+}
+
+function renderEgoArea() {
+  const track = document.getElementById('ego-track');
+  track.innerHTML = '';
+
+  if (egoItems.length === 0) {
+    document.getElementById('ego-section').style.display = 'none';
+    return;
+  }
+
+  egoItems.forEach((item, idx) => {
+    const el = document.createElement('div');
+    el.classList.add('queue-item', 'next-up');
+    el.style.background = COLORS[item.color] + '22';
+    el.style.borderColor = COLORS[item.color];
+    el.style.color = COLORS[item.color];
+    el.innerHTML = `<span style="font-size:20px">${DIR_ARROW[item.dir]}</span>`;
+
+    // drag — reuse mouse system, mark as ego
+    el.addEventListener('mousedown', e => {
+      if (e.button !== 0 || animating) return;
+      e.preventDefault();
+      isDragging = true;
+      dragItem = { slotIdx: idx, itemIdx: 0, ...item, isEgo: true };
+      el.classList.add('dragging');
+      showGhost(item.color, item.dir);
+      moveGhost(e.clientX, e.clientY);
+    });
+
+    track.appendChild(el);
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  EGO SOLVER
+// ═══════════════════════════════════════════════
+
+function getUsedColors() {
+  // Collect colors used in this level's queues
+  const colors = new Set();
+  levelConfig.queues.forEach(slot => slot.forEach(it => colors.add(it.color)));
+  return Array.from(colors);
+}
+
+function computeBestItems(count) {
+  const colors = getUsedColors();
+  const dirs = ['up', 'down', 'left', 'right']; // sadece 4 ana yön
+  const n = levelConfig.size;
+
+  // Working copies of state — mutated after each greedy step
+  let simGrid = gridState.map(row => [...row]);
+  let simLine = lineState.map(row => row.map(cell => cell ? { ...cell } : null));
+
+  const picked = [];
+
+  for (let step = 0; step < count; step++) {
+    let bestScore = -1;
+    let bestItem = null;
+    let bestGrid = null;
+    let bestLine = null;
+
+    colors.forEach(colorName => {
+      const colorHex = COLORS[colorName];
+      dirs.forEach(dir => {
+        const [dr, dc] = DIR_DELTA[dir];
+        for (let r = 0; r < n; r++) {
+          for (let c = 0; c < n; c++) {
+            if (isWall(r, c)) continue;
+
+            // Build path from this start
+            const path = [];
+            let pr = r, pc = c;
+            while (pr >= 0 && pr < n && pc >= 0 && pc < n && !isWall(pr, pc)) {
+              path.push([pr, pc]);
+              pr += dr; pc += dc;
+            }
+            if (path.length === 0) continue;
+
+            // Simulate on current simGrid/simLine copies
+            const g = simGrid.map(row => [...row]);
+            const l = simLine.map(row => row.map(cell => cell ? { ...cell } : null));
+
+            path.forEach(([pr2, pc2]) => {
+              g[pr2][pc2] = colorHex;
+              l[pr2][pc2] = { color: colorName, closed: false };
+            });
+
+            // Flood fill on g
+            const blocked = Array.from({length: n}, (_, rr) =>
+              Array.from({length: n}, (__, cc) => g[rr][cc] === colorHex)
+            );
+            const outside = Array.from({length: n}, () => Array(n).fill(false));
+
+            function floodSim(sr, sc) {
+              const stack = [[sr, sc]];
+              while (stack.length) {
+                const [fr, fc] = stack.pop();
+                if (fr < 0 || fr >= n || fc < 0 || fc >= n) continue;
+                if (outside[fr][fc] || blocked[fr][fc]) continue;
+                outside[fr][fc] = true;
+                stack.push([fr-1,fc],[fr+1,fc],[fr,fc-1],[fr,fc+1]);
+              }
+            }
+
+            for (let rr = 0; rr < n; rr++) {
+              if (!blocked[rr][0])   floodSim(rr, 0);
+              if (!blocked[rr][n-1]) floodSim(rr, n-1);
+            }
+            for (let cc = 0; cc < n; cc++) {
+              if (!blocked[0][cc])   floodSim(0, cc);
+              if (!blocked[n-1][cc]) floodSim(n-1, cc);
+            }
+
+            // Count newly filled cells
+            let floodFilled = 0;
+            for (let rr = 0; rr < n; rr++)
+              for (let cc = 0; cc < n; cc++)
+                if (!isWall(rr,cc) && !outside[rr][cc] && g[rr][cc] !== colorHex && simGrid[rr][cc] !== colorHex)
+                  floodFilled++;
+
+            // Apply flood fill to g
+            for (let rr = 0; rr < n; rr++)
+              for (let cc = 0; cc < n; cc++)
+                if (!isWall(rr,cc) && !outside[rr][cc] && g[rr][cc] !== colorHex) {
+                  g[rr][cc] = colorHex;
+                  l[rr][cc] = { color: colorName, closed: true };
+                }
+
+            const score = path.length + floodFilled * 3;
+
+            if (score > bestScore) {
+              bestScore = score;
+              bestItem = { color: colorName, dir };
+              bestGrid = g;
+              bestLine = l;
+            }
+          }
+        }
+      });
+    });
+
+    if (!bestItem) break;
+    picked.push(bestItem);
+    simGrid = bestGrid;
+    simLine = bestLine;
+  }
+
+  return picked;
+}
+
+function activateEgoSolver() {
+  document.getElementById('overlay-fail').classList.remove('show');
+
+  const bestItems = computeBestItems(EGO_STEPS);
+  if (bestItems.length === 0) { startGame(); return; }
+
+  egoItems = bestItems;
+  egoActive = true;
+  updateStatus();
+  renderEgoArea();
+  document.getElementById('ego-section').style.display = 'flex';
+}
 
 // editorCellColors: Map key -> colorName (for pre-colored cells)
 let editorCellColors = new Map();
@@ -1634,6 +1979,8 @@ document.querySelectorAll('.tab').forEach(tab => {
 document.getElementById('btn-restart').addEventListener('click', startGame);
 document.getElementById('btn-win-restart').addEventListener('click', startGame);
 document.getElementById('btn-fail-restart').addEventListener('click', startGame);
+document.getElementById('btn-ego').addEventListener('click', activateEgo);
+document.getElementById('btn-ego-solver').addEventListener('click', activateEgoSolver);
 
 // Editor: build grid
 document.getElementById('btn-build-grid').addEventListener('click', buildEditorBoard);
@@ -1707,6 +2054,7 @@ levelConfig = {
   queues: editorSlots.map(s => s.map(it => ({ ...it })))
 };
 document.getElementById('ed-size').value = editorSize;
+document.getElementById('ego-steps-label').textContent = EGO_STEPS;
 buildEditorBoard();
 renderEditorSlots();
 startGame();
