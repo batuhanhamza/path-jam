@@ -1234,7 +1234,7 @@ function processMove(colorName, colorHex, path, crossedColors) {
 
   // Now destroy crossed open lines — intersection cells are safe because
   // they now belong to colorName, not the destroyed color
-  crossedColors.forEach(dc => destroyLine(dc));
+  // crossedColors.forEach(dc => destroyLine(dc));
 
   tryFloodFill(colorName, colorHex);
   updateStatus();
