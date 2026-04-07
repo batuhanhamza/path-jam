@@ -641,6 +641,91 @@
     outline-offset: 2px;
   }
 
+  /* ── RANDOM SLOT ── */
+  .random-slot-config {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .random-slot-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .random-slot-label {
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    color: var(--text-dim);
+    white-space: nowrap;
+    min-width: 44px;
+  }
+
+  .random-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    border: 1.5px solid var(--border);
+    background: var(--bg);
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    cursor: default;
+  }
+
+  .random-tag button {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .random-tag button:hover { color: var(--accent2); }
+
+  .slot-type-toggle {
+    display: flex;
+    gap: 4px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px;
+  }
+
+  .slot-type-btn {
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+
+  .slot-type-btn.active {
+    background: var(--surface2);
+    color: var(--text);
+  }
+
+  .regenerate-btn {
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--accent);
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .regenerate-btn:hover { opacity: 0.7; }
+
   .slot-add-row {
     display: flex;
     gap: 6px;
@@ -1564,7 +1649,6 @@ function renderEgoArea() {
 // ═══════════════════════════════════════════════
 
 function getUsedColors() {
-  // Collect colors used in this level's queues
   const colors = new Set();
   levelConfig.queues.forEach(slot => slot.forEach(it => colors.add(it.color)));
   return Array.from(colors);
@@ -1805,6 +1889,54 @@ let dragSlotIdx = null;
 let dragChipIdx = null;
 let chipDragOverIdx = null;
 
+// editorSlots entry:
+//   manual: { type:'manual', items:[{color,dir},...] }
+//   random: { type:'random', count:10, colors:['red','blue'], dirs:['up','down'] }
+
+function generateRandomItems(slot) {
+  const { count, colors, dirs } = slot;
+  if (!colors.length || !dirs.length || count <= 0) return [];
+
+  // Group dirs by axis
+  const vertical   = dirs.filter(d => d === 'up' || d === 'down');
+  const horizontal = dirs.filter(d => d === 'left' || d === 'right');
+  const diagonal   = dirs.filter(d => ['upleft','upright','downleft','downright'].includes(d));
+
+  // One representative per axis (random from that axis pool)
+  const axisGroups = [vertical, horizontal, diagonal].filter(g => g.length > 0);
+
+  const items = [];
+
+  // Guarantee: one of each color (dir from full pool, random)
+  colors.forEach(color => {
+    const dir = dirs[Math.floor(Math.random() * dirs.length)];
+    items.push({ color, dir });
+  });
+
+  // Guarantee: one per axis (color random from pool)
+  axisGroups.forEach(group => {
+    const dir   = group[Math.floor(Math.random() * group.length)];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    items.push({ color, dir });
+  });
+
+  // Fill remaining randomly
+  const remaining = Math.max(0, count - items.length);
+  for (let i = 0; i < remaining; i++) {
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const dir   = dirs[Math.floor(Math.random() * dirs.length)];
+    items.push({ color, dir });
+  }
+
+  // Fisher-Yates shuffle
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+
+  return items.slice(0, count);
+}
+
 function renderEditorSlots() {
   const container = document.getElementById('queue-slots-editor');
   container.innerHTML = '';
@@ -1813,110 +1945,225 @@ function renderEditorSlots() {
     const section = document.createElement('div');
     section.classList.add('queue-slot-editor');
 
-    // header
+    // ── Header with type toggle ──
     const header = document.createElement('div');
     header.classList.add('queue-slot-editor-header');
+    const isRandom = slot.type === 'random';
+
     header.innerHTML = `
       <span class="queue-slot-editor-title">SLOT ${slotIdx + 1}</span>
-      <button class="remove-btn" data-slot="${slotIdx}" title="Remove slot">✕ slot</button>
+      <div class="slot-type-toggle">
+        <button class="slot-type-btn ${!isRandom ? 'active' : ''}" data-type="manual">MANUAL</button>
+        <button class="slot-type-btn ${isRandom ? 'active' : ''}" data-type="random">RANDOM</button>
+      </div>
+      <button class="remove-btn" data-slot="${slotIdx}" title="Remove slot">✕</button>
     `;
     header.querySelector('.remove-btn').addEventListener('click', () => {
       editorSlots.splice(slotIdx, 1);
       renderEditorSlots();
     });
-
-    // items chips — draggable reorder
-    const chipsList = document.createElement('div');
-    chipsList.classList.add('slot-items-list');
-    chipsList.dataset.slot = slotIdx;
-
-    slot.forEach((item, itemIdx) => {
-      const chip = document.createElement('div');
-      chip.classList.add('slot-item-chip');
-      chip.draggable = true;
-      chip.dataset.slot = slotIdx;
-      chip.dataset.item = itemIdx;
-      chip.style.background = COLORS[item.color] + '22';
-      chip.style.borderColor = COLORS[item.color];
-      chip.style.color = COLORS[item.color];
-      chip.innerHTML = `
-        <span class="chip-drag-handle" style="cursor:grab;opacity:0.5;font-size:13px;margin-right:2px;">⠿</span>
-        <span>${DIR_ARROW[item.dir]}</span>
-        <span style="font-size:11px;font-family:'Space Mono',monospace;">${item.color}</span>
-        <button class="chip-remove" data-slot="${slotIdx}" data-item="${itemIdx}">✕</button>
-      `;
-      chip.querySelector('.chip-remove').addEventListener('click', (e) => {
-        e.stopPropagation();
-        editorSlots[slotIdx].splice(itemIdx, 1);
+    header.querySelectorAll('.slot-type-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset.type;
+        if (t === slot.type) return;
+        if (t === 'random') {
+          editorSlots[slotIdx] = { type: 'random', count: 6, colors: [], dirs: [] };
+        } else {
+          editorSlots[slotIdx] = { type: 'manual', items: [] };
+        }
         renderEditorSlots();
       });
-
-      // drag events
-      chip.addEventListener('dragstart', e => {
-        dragSlotIdx = slotIdx;
-        dragChipIdx = itemIdx;
-        e.dataTransfer.effectAllowed = 'move';
-        setTimeout(() => chip.style.opacity = '0.4', 0);
-      });
-      chip.addEventListener('dragend', () => {
-        chip.style.opacity = '';
-        document.querySelectorAll('.slot-item-chip.drag-over').forEach(c => c.classList.remove('drag-over'));
-        dragSlotIdx = null;
-        dragChipIdx = null;
-      });
-      chip.addEventListener('dragover', e => {
-        e.preventDefault();
-        if (dragSlotIdx !== slotIdx) return; // only reorder within same slot
-        document.querySelectorAll('.slot-item-chip.drag-over').forEach(c => c.classList.remove('drag-over'));
-        chip.classList.add('drag-over');
-        chipDragOverIdx = itemIdx;
-      });
-      chip.addEventListener('drop', e => {
-        e.preventDefault();
-        if (dragSlotIdx !== slotIdx || dragChipIdx === null || dragChipIdx === itemIdx) return;
-        const items = editorSlots[slotIdx];
-        const [moved] = items.splice(dragChipIdx, 1);
-        const insertAt = dragChipIdx < itemIdx ? itemIdx - 1 : itemIdx;
-        items.splice(insertAt, 0, moved);
-        renderEditorSlots();
-      });
-
-      chipsList.appendChild(chip);
-    });
-
-    // drop on empty area at end of list (drop after last item)
-    chipsList.addEventListener('dragover', e => e.preventDefault());
-    chipsList.addEventListener('drop', e => {
-      e.preventDefault();
-      if (dragSlotIdx !== slotIdx || dragChipIdx === null) return;
-      const items = editorSlots[slotIdx];
-      const [moved] = items.splice(dragChipIdx, 1);
-      items.push(moved);
-      renderEditorSlots();
-    });
-
-    // add row
-    const addRow = document.createElement('div');
-    addRow.classList.add('slot-add-row');
-    addRow.innerHTML = `
-      <select class="ed-color-sel">
-        ${Object.keys(COLORS).map(c => `<option value="${c}">${c}</option>`).join('')}
-      </select>
-      <select class="ed-dir-sel">
-        ${Object.keys(DIR_ARROW).map(d => `<option value="${d}">${DIR_ARROW[d]} ${d}</option>`).join('')}
-      </select>
-      <button class="btn btn-sm" data-slot="${slotIdx}">+ item</button>
-    `;
-    addRow.querySelector('.btn').addEventListener('click', () => {
-      const color = addRow.querySelector('.ed-color-sel').value;
-      const dir   = addRow.querySelector('.ed-dir-sel').value;
-      editorSlots[slotIdx].push({ color, dir });
-      renderEditorSlots();
     });
 
     section.appendChild(header);
-    section.appendChild(chipsList);
-    section.appendChild(addRow);
+
+    if (isRandom) {
+      // ── Random config ──
+      const cfg = document.createElement('div');
+      cfg.classList.add('random-slot-config');
+
+      // Count input
+      const countRow = document.createElement('div');
+      countRow.classList.add('random-slot-row');
+      countRow.innerHTML = `
+        <span class="random-slot-label">COUNT</span>
+        <input type="number" min="1" max="30" value="${slot.count}"
+          style="width:64px;padding:4px 8px;font-size:12px;" class="rand-count">
+      `;
+      countRow.querySelector('.rand-count').addEventListener('change', e => {
+        editorSlots[slotIdx].count = Math.max(1, parseInt(e.target.value) || 1);
+      });
+
+      // Colors row
+      const colorRow = document.createElement('div');
+      colorRow.classList.add('random-slot-row');
+      colorRow.innerHTML = `<span class="random-slot-label">COLORS</span>`;
+      slot.colors.forEach((c, ci) => {
+        const tag = document.createElement('div');
+        tag.classList.add('random-tag');
+        tag.style.color = COLORS[c];
+        tag.style.borderColor = COLORS[c];
+        tag.innerHTML = `${c} <button data-ci="${ci}">✕</button>`;
+        tag.querySelector('button').addEventListener('click', () => {
+          editorSlots[slotIdx].colors.splice(ci, 1);
+          renderEditorSlots();
+        });
+        colorRow.appendChild(tag);
+      });
+      const colorAdd = document.createElement('select');
+      colorAdd.style.cssText = 'padding:3px 6px;font-size:11px;width:auto;';
+      colorAdd.innerHTML = `<option value="">+ color</option>` +
+        Object.keys(COLORS).map(c => `<option value="${c}">${c}</option>`).join('');
+      colorAdd.addEventListener('change', e => {
+        const val = e.target.value;
+        if (val && !editorSlots[slotIdx].colors.includes(val)) {
+          editorSlots[slotIdx].colors.push(val);
+          renderEditorSlots();
+        }
+        e.target.value = '';
+      });
+      colorRow.appendChild(colorAdd);
+
+      // Dirs row
+      const dirRow = document.createElement('div');
+      dirRow.classList.add('random-slot-row');
+      dirRow.innerHTML = `<span class="random-slot-label">DIRS</span>`;
+      slot.dirs.forEach((d, di) => {
+        const tag = document.createElement('div');
+        tag.classList.add('random-tag');
+        tag.innerHTML = `${DIR_ARROW[d]} <button data-di="${di}">✕</button>`;
+        tag.querySelector('button').addEventListener('click', () => {
+          editorSlots[slotIdx].dirs.splice(di, 1);
+          renderEditorSlots();
+        });
+        dirRow.appendChild(tag);
+      });
+      const dirAdd = document.createElement('select');
+      dirAdd.style.cssText = 'padding:3px 6px;font-size:11px;width:auto;';
+      dirAdd.innerHTML = `<option value="">+ dir</option>` +
+        ['up','down','left','right','upleft','upright','downleft','downright']
+          .map(d => `<option value="${d}">${DIR_ARROW[d]} ${d}</option>`).join('');
+      dirAdd.addEventListener('change', e => {
+        const val = e.target.value;
+        if (val && !editorSlots[slotIdx].dirs.includes(val)) {
+          editorSlots[slotIdx].dirs.push(val);
+          renderEditorSlots();
+        }
+        e.target.value = '';
+      });
+      dirRow.appendChild(dirAdd);
+
+      // Preview
+      const axisCount = [
+        slot.dirs.some(d => d==='up'||d==='down') ? 1 : 0,
+        slot.dirs.some(d => d==='left'||d==='right') ? 1 : 0,
+        slot.dirs.some(d => ['upleft','upright','downleft','downright'].includes(d)) ? 1 : 0,
+      ].reduce((a,b) => a+b, 0);
+      const minNeeded = slot.colors.length + axisCount;
+      const canGenerate = slot.colors.length > 0 && slot.dirs.length > 0 && slot.count >= minNeeded;
+      const preview = document.createElement('div');
+      preview.style.cssText = 'font-size:10px;font-family:Space Mono,monospace;color:var(--text-dim);margin-top:2px;';
+      if (!canGenerate && (slot.colors.length > 0 || slot.dirs.length > 0)) {
+        const minCount = Math.max(slot.colors.length + slot.dirs.length, 1);
+        preview.textContent = `⚠ min ${minCount} items needed`;
+        preview.style.color = 'var(--accent2)';
+      } else if (canGenerate) {
+        preview.textContent = `→ will generate ${slot.count} items`;
+      }
+
+      cfg.appendChild(countRow);
+      cfg.appendChild(colorRow);
+      cfg.appendChild(dirRow);
+      cfg.appendChild(preview);
+      section.appendChild(cfg);
+
+    } else {
+      // ── Manual: existing chip UI ──
+      const chipsList = document.createElement('div');
+      chipsList.classList.add('slot-items-list');
+      chipsList.dataset.slot = slotIdx;
+      const items = slot.items || [];
+
+      items.forEach((item, itemIdx) => {
+        const chip = document.createElement('div');
+        chip.classList.add('slot-item-chip');
+        chip.draggable = true;
+        chip.dataset.slot = slotIdx;
+        chip.dataset.item = itemIdx;
+        chip.style.background = COLORS[item.color] + '22';
+        chip.style.borderColor = COLORS[item.color];
+        chip.style.color = COLORS[item.color];
+        chip.innerHTML = `
+          <span class="chip-drag-handle" style="cursor:grab;opacity:0.5;font-size:13px;margin-right:2px;">⠿</span>
+          <span>${DIR_ARROW[item.dir]}</span>
+          <span style="font-size:11px;font-family:'Space Mono',monospace;">${item.color}</span>
+          <button class="chip-remove">✕</button>
+        `;
+        chip.querySelector('.chip-remove').addEventListener('click', e => {
+          e.stopPropagation();
+          editorSlots[slotIdx].items.splice(itemIdx, 1);
+          renderEditorSlots();
+        });
+        chip.addEventListener('dragstart', e => {
+          dragSlotIdx = slotIdx; dragChipIdx = itemIdx;
+          e.dataTransfer.effectAllowed = 'move';
+          setTimeout(() => chip.style.opacity = '0.4', 0);
+        });
+        chip.addEventListener('dragend', () => {
+          chip.style.opacity = '';
+          document.querySelectorAll('.slot-item-chip.drag-over').forEach(c => c.classList.remove('drag-over'));
+          dragSlotIdx = null; dragChipIdx = null;
+        });
+        chip.addEventListener('dragover', e => {
+          e.preventDefault();
+          if (dragSlotIdx !== slotIdx) return;
+          document.querySelectorAll('.slot-item-chip.drag-over').forEach(c => c.classList.remove('drag-over'));
+          chip.classList.add('drag-over');
+          chipDragOverIdx = itemIdx;
+        });
+        chip.addEventListener('drop', e => {
+          e.preventDefault();
+          if (dragSlotIdx !== slotIdx || dragChipIdx === null || dragChipIdx === itemIdx) return;
+          const [moved] = items.splice(dragChipIdx, 1);
+          const insertAt = dragChipIdx < itemIdx ? itemIdx - 1 : itemIdx;
+          items.splice(insertAt, 0, moved);
+          renderEditorSlots();
+        });
+        chipsList.appendChild(chip);
+      });
+
+      chipsList.addEventListener('dragover', e => e.preventDefault());
+      chipsList.addEventListener('drop', e => {
+        e.preventDefault();
+        if (dragSlotIdx !== slotIdx || dragChipIdx === null) return;
+        const [moved] = items.splice(dragChipIdx, 1);
+        items.push(moved);
+        renderEditorSlots();
+      });
+
+      const addRow = document.createElement('div');
+      addRow.classList.add('slot-add-row');
+      addRow.innerHTML = `
+        <select class="ed-color-sel">
+          ${Object.keys(COLORS).map(c => `<option value="${c}">${c}</option>`).join('')}
+        </select>
+        <select class="ed-dir-sel">
+          ${Object.keys(DIR_ARROW).map(d => `<option value="${d}">${DIR_ARROW[d]} ${d}</option>`).join('')}
+        </select>
+        <button class="btn btn-sm">+ item</button>
+      `;
+      addRow.querySelector('.btn').addEventListener('click', () => {
+        const color = addRow.querySelector('.ed-color-sel').value;
+        const dir   = addRow.querySelector('.ed-dir-sel').value;
+        if (!editorSlots[slotIdx].items) editorSlots[slotIdx].items = [];
+        editorSlots[slotIdx].items.push({ color, dir });
+        renderEditorSlots();
+      });
+
+      section.appendChild(chipsList);
+      section.appendChild(addRow);
+    }
+
     container.appendChild(section);
   });
 }
@@ -1930,7 +2177,12 @@ function exportLevel() {
     size: editorSize,
     walls: Array.from(editorWalls),
     initialColors: Object.fromEntries(editorCellColors),
-    queues: editorSlots.map(slot => slot.map(it => ({ color: it.color, dir: it.dir })))
+    queues: editorSlots.map(slot => {
+      if (slot.type === 'random') {
+        return { type: 'random', count: slot.count, colors: slot.colors, dirs: slot.dirs };
+      }
+      return { type: 'manual', items: (slot.items || []).map(it => ({ color: it.color, dir: it.dir })) };
+    })
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
@@ -1950,7 +2202,16 @@ function importLevel(file) {
       editorSize        = data.size;
       editorWalls       = new Set(data.walls || []);
       editorCellColors  = new Map(Object.entries(data.initialColors || {}));
-      editorSlots       = data.queues.map(slot => slot.map(it => ({ color: it.color, dir: it.dir })));
+      // Support old format (array of arrays) and new format
+      editorSlots = data.queues.map(slot => {
+        if (Array.isArray(slot)) {
+          return { type: 'manual', items: slot.map(it => ({ color: it.color, dir: it.dir })) };
+        }
+        if (slot.type === 'random') {
+          return { type: 'random', count: slot.count, colors: slot.colors || [], dirs: slot.dirs || [] };
+        }
+        return { type: 'manual', items: (slot.items || []).map(it => ({ color: it.color, dir: it.dir })) };
+      });
       document.getElementById('ed-size').value = editorSize;
       buildEditorBoard();
       renderEditorSlots();
@@ -1987,18 +2248,30 @@ document.getElementById('btn-build-grid').addEventListener('click', buildEditorB
 
 // Editor: add slot
 document.getElementById('btn-add-slot').addEventListener('click', () => {
-  editorSlots.push([]);
+  editorSlots.push({ type: 'manual', items: [] });
   renderEditorSlots();
 });
 
 // Editor: apply level
 document.getElementById('btn-apply-level').addEventListener('click', () => {
-  const hasItems = editorSlots.some(s => s.length > 0);
+  // Resolve random slots → actual items
+  const resolvedQueues = editorSlots.map(slot => {
+    if (slot.type === 'random') {
+      if (!slot.colors.length || !slot.dirs.length) {
+        alert('A random slot needs at least one color and one direction.');
+        return null;
+      }
+      return generateRandomItems(slot);
+    }
+    return (slot.items || []).map(it => ({ ...it }));
+  });
+  if (resolvedQueues.includes(null)) return;
+  const hasItems = resolvedQueues.some(q => q.length > 0);
   if (!hasItems) { alert('Add at least one item in a slot.'); return; }
   levelConfig = {
     size: editorSize,
     walls: new Set(editorWalls),
-    queues: editorSlots.map(slot => slot.map(it => ({ ...it }))),
+    queues: resolvedQueues,
     initialColors: Object.fromEntries(editorCellColors)
   };
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -2046,12 +2319,16 @@ const DEFAULT_LEVEL = {
 editorSize       = DEFAULT_LEVEL.size;
 editorWalls      = new Set(DEFAULT_LEVEL.walls);
 editorCellColors = new Map(Object.entries(DEFAULT_LEVEL.initialColors || {}));
-editorSlots      = DEFAULT_LEVEL.queues.map(s => s.map(it => ({ ...it })));
+editorSlots      = DEFAULT_LEVEL.queues.map(slot => {
+  if (Array.isArray(slot)) return { type: 'manual', items: slot.map(it => ({ ...it })) };
+  if (slot.type === 'random') return { type: 'random', count: slot.count, colors: [...slot.colors], dirs: [...slot.dirs] };
+  return { type: 'manual', items: (slot.items || slot).map(it => ({ ...it })) };
+});
 levelConfig = {
   size: editorSize,
   walls: new Set(editorWalls),
   initialColors: DEFAULT_LEVEL.initialColors || {},
-  queues: editorSlots.map(s => s.map(it => ({ ...it })))
+  queues: editorSlots.map(s => (s.items || []).map(it => ({ ...it })))
 };
 document.getElementById('ed-size').value = editorSize;
 document.getElementById('ego-steps-label').textContent = EGO_STEPS;
